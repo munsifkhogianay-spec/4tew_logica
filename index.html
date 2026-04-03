@@ -112,7 +112,6 @@
       margin-top: 16px;
     }
     table {
-      width: 100%;
       border-collapse: collapse;
       font-size: 0.82rem;
     }
@@ -123,21 +122,40 @@
       font-weight: 700;
       border-bottom: 2px solid #2a2a40;
       white-space: nowrap;
+      border-right: 1px solid #1e1e30;
     }
+    th:last-child { border-right: none; }
     th.var-col { color: #38bdf8; }
-    th.result-col { color: #a78bfa; }
+    th.sub-col { color: #94a3b8; font-size: 0.75rem; }
+    th.result-col {
+      color: #a78bfa;
+      background: #16163a;
+      border-left: 2px solid #a78bfa44;
+    }
     td {
       padding: 8px 14px;
       text-align: center;
       border-bottom: 1px solid #12121e;
+      border-right: 1px solid #0f0f1e;
     }
+    td:last-child { border-right: none; }
     tr:last-child td { border-bottom: none; }
     tr:nth-child(even) { background: #0d0d18; }
     tr:hover td { background: #15152a; }
     .val-0 { color: #f87171; font-weight: 700; }
     .val-1 { color: #4ade80; font-weight: 700; }
-    .result-td { background: #11113a !important; }
+    .result-td {
+      background: #11113a !important;
+      border-left: 2px solid #a78bfa44 !important;
+    }
     tr:nth-child(even) .result-td { background: #0e0e30 !important; }
+    tr:hover .result-td { background: #14144a !important; }
+    .divider-th {
+      border-left: 2px solid #2a2a50 !important;
+    }
+    .divider-td {
+      border-left: 2px solid #1a1a35 !important;
+    }
     .stats {
       display: flex;
       gap: 12px;
@@ -158,12 +176,18 @@
     .conting { color: #fbbf24; }
     .hint { font-size: 0.72rem; color: #444460; margin-bottom: 16px; line-height: 1.6; }
     .hint span { color: #6060a0; }
+    .step-legend {
+      margin-top: 10px;
+      font-size: 0.7rem;
+      color: #444460;
+    }
+    .step-legend span { color: #6060a0; }
   </style>
 </head>
 <body>
 
   <h1>Truth Table Solver</h1>
-  <div class="subtitle">Logische uitspraken · Waarheidstabellen</div>
+  <div class="subtitle">Logische uitspraken · Waarheidstabellen · Stap voor stap</div>
 
   <div class="symbols" id="symbols"></div>
 
@@ -173,7 +197,7 @@
   </div>
 
   <div class="input-row">
-    <input id="formulaInput" class="formula-input" placeholder="bijv.  (p ∧ q) → ¬r" />
+    <input id="formulaInput" class="formula-input" placeholder="bijv.  (s→¬p)→(¬t∨v)" />
     <button class="btn" onclick="solve()">Oplossen</button>
     <button class="btn btn-clear" onclick="clearAll()">Wis</button>
   </div>
@@ -218,12 +242,10 @@
       el.style.display = "block";
       input.classList.add("error");
     }
-
     function hideError() {
       document.getElementById("errorMsg").style.display = "none";
       input.classList.remove("error");
     }
-
     function clearAll() {
       input.value = "";
       hideError();
@@ -231,13 +253,7 @@
       document.getElementById("stats").innerHTML = "";
     }
 
-    // --- Logic engine ---
-    function extractVars(formula) {
-      const vars = new Set();
-      for (const ch of formula) if (/[a-zA-Z]/.test(ch)) vars.add(ch);
-      return [...vars].sort();
-    }
-
+    // ─── Tokenizer ───────────────────────────────────────────────
     function tokenize(formula) {
       const tokens = [];
       let i = 0;
@@ -260,6 +276,7 @@
       return tokens;
     }
 
+    // ─── Parser — builds AST with labels ─────────────────────────
     function parse(tokens) {
       let pos = 0;
       const peek = () => tokens[pos];
@@ -267,38 +284,59 @@
 
       function parseEqv() {
         let left = parseImp();
-        while (peek()?.type === "EQV") { consume(); left = { type: "EQV", left, right: parseImp() }; }
+        while (peek()?.type === "EQV") {
+          consume();
+          const right = parseImp();
+          left = { type: "EQV", left, right, label: `(${left.label}↔${right.label})` };
+        }
         return left;
       }
       function parseImp() {
         let left = parseOr();
-        while (peek()?.type === "IMP") { consume(); left = { type: "IMP", left, right: parseOr() }; }
+        while (peek()?.type === "IMP") {
+          consume();
+          const right = parseOr();
+          left = { type: "IMP", left, right, label: `(${left.label}→${right.label})` };
+        }
         return left;
       }
       function parseOr() {
         let left = parseAnd();
-        while (peek()?.type === "OR") { consume(); left = { type: "OR", left, right: parseAnd() }; }
+        while (peek()?.type === "OR") {
+          consume();
+          const right = parseAnd();
+          left = { type: "OR", left, right, label: `(${left.label}∨${right.label})` };
+        }
         return left;
       }
       function parseAnd() {
         let left = parseNot();
-        while (peek()?.type === "AND") { consume(); left = { type: "AND", left, right: parseNot() }; }
+        while (peek()?.type === "AND") {
+          consume();
+          const right = parseNot();
+          left = { type: "AND", left, right, label: `(${left.label}∧${right.label})` };
+        }
         return left;
       }
       function parseNot() {
-        if (peek()?.type === "NOT") { consume(); return { type: "NOT", child: parseNot() }; }
+        if (peek()?.type === "NOT") {
+          consume();
+          const child = parseNot();
+          return { type: "NOT", child, label: `¬${child.label}` };
+        }
         return parseAtom();
       }
       function parseAtom() {
         const t = peek();
         if (!t) throw new Error("Onverwacht einde van formule");
-        if (t.type === "VAR") { consume(); return { type: "VAR", val: t.val }; }
-        if (t.type === "LIT") { consume(); return { type: "LIT", val: t.val }; }
+        if (t.type === "VAR") { consume(); return { type: "VAR", val: t.val, label: t.val }; }
+        if (t.type === "LIT") { consume(); return { type: "LIT", val: t.val, label: String(t.val) }; }
         if (t.type === "LPAREN") {
           consume();
           const expr = parseEqv();
           if (peek()?.type !== "RPAREN") throw new Error("Sluitend haakje ) ontbreekt");
           consume();
+          // strip outer parens from label if already wrapped
           return expr;
         }
         throw new Error(`Onverwacht teken: '${t.val || t.type}'`);
@@ -309,6 +347,23 @@
       return result;
     }
 
+    // ─── Collect subformulas in evaluation order (bottom-up) ─────
+    // Returns ordered list of unique non-trivial subformulas
+    function collectSubformulas(node, result = [], seen = new Set()) {
+      if (!node) return result;
+      // recurse children first (bottom-up)
+      if (node.child) collectSubformulas(node.child, result, seen);
+      if (node.left)  collectSubformulas(node.left,  result, seen);
+      if (node.right) collectSubformulas(node.right, result, seen);
+      // add this node if it's not a plain variable and not already added
+      if (node.type !== "VAR" && node.type !== "LIT" && !seen.has(node.label)) {
+        seen.add(node.label);
+        result.push(node);
+      }
+      return result;
+    }
+
+    // ─── Evaluator ───────────────────────────────────────────────
     function evaluate(node, env) {
       switch (node.type) {
         case "VAR": return env[node.val];
@@ -321,45 +376,78 @@
       }
     }
 
+    function extractVars(formula) {
+      const vars = new Set();
+      for (const ch of formula) if (/[a-zA-Z]/.test(ch)) vars.add(ch);
+      return [...vars].sort();
+    }
+
+    // ─── Main solve ──────────────────────────────────────────────
     function solve() {
       hideError();
       const formula = input.value.trim();
       if (!formula) return;
 
-      let vars, table, ast;
+      let vars, subformulas, ast, table;
       try {
         const tokens = tokenize(formula);
         ast = parse(tokens);
         vars = extractVars(formula);
+        subformulas = collectSubformulas(ast);
+
         const n = vars.length;
         const rows = 1 << n;
         table = [];
         for (let i = 0; i < rows; i++) {
           const env = {};
           vars.forEach((v, idx) => { env[v] = (i >> idx) & 1; });
-          table.push({ env, result: evaluate(ast, env) });
+          const subValues = {};
+          subformulas.forEach(sf => { subValues[sf.label] = evaluate(sf, env); });
+          table.push({ env, subValues, result: evaluate(ast, env) });
         }
       } catch(e) {
         showError(e.message);
         return;
       }
 
-      // Build table HTML
+      // ─── Build table HTML ──────────────────────────────────────
+      const rootLabel = ast.label;
+      // intermediate = all subformulas except the root
+      const intermediate = subformulas.filter(sf => sf.label !== rootLabel);
+
       let html = `<div class="table-wrap"><table><thead><tr>`;
+      // Variable columns
       vars.forEach(v => { html += `<th class="var-col">${v}</th>`; });
-      html += `<th class="result-col">${formula}</th></tr></thead><tbody>`;
+      // Intermediate step columns
+      intermediate.forEach((sf, i) => {
+        const divClass = i === 0 ? ' divider-th' : '';
+        html += `<th class="sub-col${divClass}">${sf.label}</th>`;
+      });
+      // Final result column
+      html += `<th class="result-col">${rootLabel}</th>`;
+      html += `</tr></thead><tbody>`;
+
       table.forEach(row => {
         html += "<tr>";
+        // Variables
         vars.forEach(v => {
           html += `<td class="${row.env[v] === 1 ? 'val-1' : 'val-0'}">${row.env[v]}</td>`;
         });
+        // Intermediate steps
+        intermediate.forEach((sf, i) => {
+          const val = row.subValues[sf.label];
+          const divClass = i === 0 ? ' divider-td' : '';
+          html += `<td class="${divClass} ${val === 1 ? 'val-1' : 'val-0'}">${val}</td>`;
+        });
+        // Final result
         html += `<td class="result-td ${row.result === 1 ? 'val-1' : 'val-0'}">${row.result}</td>`;
         html += "</tr>";
       });
+
       html += "</tbody></table></div>";
       document.getElementById("tableWrap").innerHTML = html;
 
-      // Stats
+      // ─── Stats ─────────────────────────────────────────────────
       const ones = table.filter(r => r.result === 1).length;
       const total = table.length;
       const type = ones === total ? "tautology" : ones === 0 ? "contradiction" : "contingency";
@@ -367,6 +455,7 @@
       const typeClass = type === "tautology" ? "taut" : type === "contradiction" ? "contra" : "conting";
       document.getElementById("stats").innerHTML = `
         <div class="stat"><div class="stat-label">Rijen</div><div class="stat-val">${total}</div></div>
+        <div class="stat"><div class="stat-label">Stappen</div><div class="stat-val">${subformulas.length}</div></div>
         <div class="stat"><div class="stat-label">Uitkomst 1</div><div class="stat-val taut">${ones}</div></div>
         <div class="stat"><div class="stat-label">Uitkomst 0</div><div class="stat-val contra">${total - ones}</div></div>
         <div class="stat"><div class="stat-label">Type</div><div class="stat-val ${typeClass}">${typeNL}</div></div>
@@ -375,3 +464,7 @@
   </script>
 </body>
 </html>
+```
+<function_calls>
+<invoke name="bash_tool">
+<parameter name="description">Copy to outputs
