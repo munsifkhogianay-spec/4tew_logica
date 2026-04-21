@@ -68,7 +68,6 @@
     th.var-col{color:var(--accent2);}
     th.sub-col{color:var(--text-muted);font-size:0.75rem;font-weight:500;}
     th.result-col{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface2));}
-    th.col-active{color:#fff!important;background:var(--accent)!important;}
     td{padding:9px 16px;text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);background:var(--surface);}
     td:last-child{border-right:none;}
     tr:last-child td{border-bottom:none;}
@@ -80,16 +79,11 @@
     tr:hover .result-td{background:color-mix(in srgb,var(--accent) 12%,var(--surface))!important;}
     .divider-th{border-left:2px solid var(--border)!important;}
     .divider-td{border-left:2px solid var(--border)!important;}
-    .cell-active{background:color-mix(in srgb,var(--accent) 22%,var(--surface))!important;outline:2px solid var(--accent);outline-offset:-2px;}
-    .row-active td{background:color-mix(in srgb,var(--accent) 15%,var(--surface))!important;}
-    .row-active .result-td{background:color-mix(in srgb,var(--accent) 22%,var(--surface))!important;}
     .stats{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
     .stat{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:10px 16px;font-size:0.75rem;box-shadow:var(--shadow);min-width:70px;}
     .stat-label{color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-size:0.63rem;}
     .stat-val{font-size:1.05rem;font-weight:700;margin-top:3px;color:var(--text);}
     .taut{color:#059669;}.contra{color:#e11d48;}.conting{color:#d97706;}
-    .step-nav{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap;}
-    .step-info{font-size:0.78rem;color:var(--text-muted);flex:1;text-align:center;}
     .gen-panel{background:var(--surface);border:1.5px solid var(--border);border-radius:16px;padding:24px;box-shadow:var(--shadow);}
     .gen-row{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;}
     .gen-label{font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;min-width:110px;padding-top:7px;}
@@ -156,9 +150,6 @@
   </div>
   <div id="errorMsg" class="error-msg" style="display:none"></div>
   <div id="tableWrap"></div>
-  <div id="stepNav" class="step-nav" style="display:none">
-    <span class="step-info" id="stepInfo"></span>
-  </div>
   <div id="stats" class="stats"></div>
 </div>
 
@@ -168,9 +159,9 @@
     <div class="gen-row">
       <span class="gen-label">Type</span>
       <div class="gen-chips" id="type-chips">
-        <button class="gen-chip selected" data-type="tautologie"   onclick="selectType(this)"><span class="ck">✓</span> Tautologie</button>
+        <button class="gen-chip"          data-type="tautologie"   onclick="selectType(this)"><span class="ck">✓</span> Tautologie</button>
         <button class="gen-chip"          data-type="contradictie" onclick="selectType(this)"><span class="ck">✓</span> Contradictie</button>
-        <button class="gen-chip"          data-type="contingentie" onclick="selectType(this)"><span class="ck">✓</span> Contingentie</button>
+        <button class="gen-chip selected" data-type="contingentie" onclick="selectType(this)"><span class="ck">✓</span> Contingentie</button>
       </div>
     </div>
     <div class="gen-row">
@@ -220,7 +211,7 @@ inp.addEventListener('keydown',function(e){if(e.key==='Enter')solve();});
 
 function showError(msg){var el=document.getElementById('errorMsg');el.textContent='⚠ '+msg;el.style.display='block';inp.classList.add('error');}
 function hideError(){document.getElementById('errorMsg').style.display='none';inp.classList.remove('error');}
-function clearAll(){inp.value='';hideError();document.getElementById('tableWrap').innerHTML='';document.getElementById('stats').innerHTML='';document.getElementById('stepNav').style.display='none';stepData=null;}
+function clearAll(){inp.value='';hideError();document.getElementById('tableWrap').innerHTML='';document.getElementById('stats').innerHTML='';}
 
 // ── Tokenizer ──
 function tokenize(f){
@@ -228,7 +219,7 @@ function tokenize(f){
   while(i<f.length){
     var c=f[i];
     if(/\s/.test(c)){i++;continue;}
-    if(/[a-zA-Z]/.test(c)){tk.push({type:'VAR',val:c});i++;continue;}
+    if(/[a-zA-Z]/.test(c)){tk.push({type:'VAR',val:c.toLowerCase()});i++;continue;}
     if(c==='¬'||c==='~'||c==='!'){tk.push({type:'NOT'});i++;continue;}
     if(c==='∧'||c==='&'){tk.push({type:'AND'});i++;continue;}
     if(c==='∨'||c==='|'){tk.push({type:'OR'});i++;continue;}
@@ -267,7 +258,7 @@ function parse(tokens){
   return result;
 }
 
-// ── Collect subformulas bottom-up (leaves first, root last) ──
+// ── Collect subformulas bottom-up ──
 function collectSub(node,res,seen){
   if(!res)res=[];if(!seen)seen={};
   if(!node)return res;
@@ -289,13 +280,31 @@ function evaluate(node,env){
   if(node.type==='EQV')return evaluate(node.left,env)===evaluate(node.right,env)?1:0;
 }
 
-function extractVars(f){var seen={},vars=[];for(var i=0;i<f.length;i++){var c=f[i];if(/[a-zA-Z]/.test(c)&&!seen[c]){seen[c]=true;vars.push(c);}}return vars;}
+// ── Extract vars in alphabetical order ──
+function extractVars(f){
+  var seen={},vars=[];
+  for(var i=0;i<f.length;i++){
+    var c=f[i].toLowerCase();
+    if(/[a-z]/.test(c)&&!seen[c]){seen[c]=true;vars.push(c);}
+  }
+  // Sort alphabetically so p < q < r < s ...
+  vars.sort();
+  return vars;
+}
 
+// ── Build truth table
+// Row ordering: p is FASTEST changing (LSB), last var is SLOWEST (MSB)
+// So for vars=[p,q,r], row i gives:
+//   p = bit 0 of i, q = bit 1, r = bit 2
+// Row 0: p=0,q=0,r=0 → Row 1: p=1,q=0,r=0 → Row 2: p=0,q=1,r=0 ...
 function buildTable(ast,vars){
   var subs=collectSub(ast),n=vars.length,rows=1<<n,table=[];
-  for(var i=rows-1;i>=0;i--){
+  for(var i=0;i<rows;i++){
     var env={};
-    for(var vi=0;vi<vars.length;vi++)env[vars[vi]]=(i>>(n-1-vi))&1;
+    for(var vi=0;vi<n;vi++){
+      // vars[0]=p is LSB (fastest), vars[n-1] is MSB (slowest)
+      env[vars[vi]]=(i>>vi)&1;
+    }
     var sv={};
     for(var si=0;si<subs.length;si++)sv[subs[si].label]=evaluate(subs[si],env);
     table.push({env:env,sv:sv,result:evaluate(ast,env)});
@@ -304,14 +313,10 @@ function buildTable(ast,vars){
 }
 
 // ── Solver ──
-var stepData=null,stepIndex=0;
-
 function solve(){
   hideError();
   document.getElementById('tableWrap').innerHTML='';
   document.getElementById('stats').innerHTML='';
-  document.getElementById('stepNav').style.display='none';
-  stepData=null;
   var formula=inp.value.trim();
   if(!formula)return;
   var ast,vars,subs,table;
@@ -327,17 +332,14 @@ function solve(){
   var inter=subs.filter(function(s){return s.label!==rootLabel;});
 
   if(currentMode==='all'){
-    // Show ONLY the variable columns + the final result column (no intermediate subs)
     renderAll(vars,rootLabel,table);
   } else {
-    // Stap voor stap: show full table with all sub-formula columns immediately
-    stepData={vars:vars,inter:inter,rootLabel:rootLabel,table:table};
-    renderStep();
+    renderStep(vars,inter,rootLabel,table);
   }
   renderStats(table);
 }
 
-// ── Alleen eindresultaat: vars + result only ──
+// ── Alleen eindresultaat ──
 function renderAll(vars,rootLabel,table){
   var h='<div class="table-wrap"><table><thead><tr>';
   for(var i=0;i<vars.length;i++)h+='<th class="var-col">'+vars[i]+'</th>';
@@ -355,14 +357,12 @@ function renderAll(vars,rootLabel,table){
   document.getElementById('tableWrap').innerHTML=h;
 }
 
-// ── Stap voor stap: vars + all sub-formula columns + result, all at once ──
-function renderStep(){
-  if(!stepData)return;
-  var vars=stepData.vars,inter=stepData.inter,rootLabel=stepData.rootLabel,table=stepData.table;
+// ── Stap voor stap ──
+function renderStep(vars,inter,rootLabel,table){
   var h='<div class="table-wrap"><table><thead><tr>';
   for(var i=0;i<vars.length;i++)h+='<th class="var-col">'+vars[i]+'</th>';
   for(var j=0;j<inter.length;j++)h+='<th class="sub-col'+(j===0?' divider-th':'')+'">'+inter[j].label+'</th>';
-  h+='<th class="result-col">'+rootLabel+'</th>';
+  h+='<th class="result-col'+(inter.length===0?' divider-th':'')+'">'+rootLabel+'</th>';
   h+='</tr></thead><tbody>';
   for(var r=0;r<table.length;r++){
     var row=table[r];
@@ -370,7 +370,7 @@ function renderStep(){
     for(var i=0;i<vars.length;i++){var v=row.env[vars[i]];h+='<td class="'+(v===1?'val-1':'val-0')+'">'+v+'</td>';}
     for(var j=0;j<inter.length;j++){var sv=row.sv[inter[j].label];h+='<td class="'+(j===0?'divider-td ':'')+''+(sv===1?'val-1':'val-0')+'">'+sv+'</td>';}
     var res=row.result;
-    h+='<td class="result-td '+(res===1?'val-1':'val-0')+'">'+res+'</td>';
+    h+='<td class="result-td '+(inter.length===0?'divider-td ':'')+''+(res===1?'val-1':'val-0')+'">'+res+'</td>';
     h+='</tr>';
   }
   h+='</tbody></table></div>';
@@ -389,7 +389,9 @@ function renderStats(table){
 }
 
 // ── Generator ──
+// Standard ordered var list for generator
 var ALL_VARS='pqrstuvwxyzabcdefghijklmno'.split('');
+
 function selectType(el){document.querySelectorAll('#type-chips .gen-chip').forEach(function(b){b.classList.remove('selected');});el.classList.add('selected');}
 function toggleOp(el){
   var selBin=Array.from(document.querySelectorAll('#op-chips .gen-chip.selected')).filter(function(b){return b.dataset.op!=='NOT';});
@@ -398,24 +400,90 @@ function toggleOp(el){
 }
 function updateVarPreview(){var n=parseInt(document.getElementById('varCount').value)||2;n=Math.max(1,Math.min(n,8));document.getElementById('varPreview').textContent='Gebruikt: '+ALL_VARS.slice(0,n).join(', ');}
 updateVarPreview();
+
 function evalType(f,vars){
   try{
     var ast=parse(tokenize(f)),n=vars.length,rows=1<<n,ones=0;
-    for(var i=0;i<rows;i++){var env={};for(var vi=0;vi<vars.length;vi++)env[vars[vi]]=(i>>(n-1-vi))&1;if(evaluate(ast,env)===1)ones++;}
+    for(var i=0;i<rows;i++){var env={};for(var vi=0;vi<vars.length;vi++)env[vars[vi]]=(i>>vi)&1;if(evaluate(ast,env)===1)ones++;}
     if(ones===rows)return'tautologie';if(ones===0)return'contradictie';return'contingentie';
   }catch(e){return null;}
 }
-function buildRand(vars,ops,depth){
-  var binOps=ops.filter(function(o){return o!=='NOT';}),useNeg=ops.indexOf('NOT')>=0;
-  if(depth<=0||Math.random()<0.28){var v=vars[Math.floor(Math.random()*vars.length)];return(useNeg&&Math.random()<0.35)?'¬'+v:v;}
-  var opKey=binOps[Math.floor(Math.random()*binOps.length)],opSym={AND:'∧',OR:'∨',IMP:'→',EQV:'↔'}[opKey];
-  var left=buildRand(vars,ops,depth-1),right=buildRand(vars,ops,depth-1);
-  var f='('+left+opSym+right+')';
-  if(useNeg&&Math.random()<0.12)f='¬'+f;
+
+// ── Smarter generator: uses structured templates for taut/contra, random for contingent ──
+function opSym(op){return{AND:'∧',OR:'∨',IMP:'→',EQV:'↔'}[op];}
+
+// Random binary op from allowed list
+function randBinOp(binOps){return binOps[Math.floor(Math.random()*binOps.length)];}
+
+// Build a random formula of given depth, biasing toward using all vars
+function buildRand(vars,ops,depth,usedVars){
+  var binOps=ops.filter(function(o){return o!=='NOT';});
+  var useNeg=ops.indexOf('NOT')>=0;
+  // Leaf: pick an unused var first, then random
+  if(depth<=0||Math.random()<0.25){
+    var v;
+    // prefer vars not yet used
+    var unused=vars.filter(function(x){return!usedVars[x];});
+    if(unused.length>0&&Math.random()<0.7){v=unused[Math.floor(Math.random()*unused.length)];}
+    else{v=vars[Math.floor(Math.random()*vars.length)];}
+    usedVars[v]=true;
+    return(useNeg&&Math.random()<0.3)?'¬'+v:v;
+  }
+  var op=randBinOp(binOps);
+  var left=buildRand(vars,ops,depth-1,usedVars);
+  var right=buildRand(vars,ops,depth-1,usedVars);
+  var f='('+left+opSym(op)+right+')';
+  if(useNeg&&Math.random()<0.1)f='¬'+f;
   return f;
 }
-function fallbackTaut(v,ops){if(ops.indexOf('OR')>=0&&ops.indexOf('NOT')>=0)return'('+v+'∨¬'+v+')';if(ops.indexOf('IMP')>=0)return'('+v+'→'+v+')';return'('+v+'↔'+v+')';}
-function fallbackCont(v,ops){if(ops.indexOf('AND')>=0&&ops.indexOf('NOT')>=0)return'('+v+'∧¬'+v+')';return'('+v+'∧'+v+')';}
+
+// Build guaranteed tautology using available ops
+function buildTaut(vars,ops){
+  var v=vars[Math.floor(Math.random()*vars.length)];
+  var binOps=ops.filter(function(o){return o!=='NOT';});
+  var useNeg=ops.indexOf('NOT')>=0;
+  // Strategy pool: pick one randomly
+  var strategies=[];
+  if(useNeg&&ops.indexOf('OR')>=0)  strategies.push(function(){return'('+v+'∨¬'+v+')';});
+  if(ops.indexOf('IMP')>=0)          strategies.push(function(){return'('+v+'→'+v+')';});
+  if(ops.indexOf('EQV')>=0)          strategies.push(function(){return'('+v+'↔'+v+')';});
+  if(useNeg&&ops.indexOf('IMP')>=0)  strategies.push(function(){return'(¬'+v+'→'+v+')→'+v;});
+  if(ops.indexOf('IMP')>=0&&vars.length>=2){
+    var w=vars.filter(function(x){return x!==v;})[0];
+    strategies.push(function(){return'(('+v+'→'+w+')→(('+w+'→'+v+')→'+v+'))';});
+    strategies.push(function(){return'('+v+'→('+w+'→'+v+'))';});
+  }
+  if(ops.indexOf('IMP')>=0&&useNeg){
+    strategies.push(function(){return'(¬¬'+v+'→'+v+')';});
+    strategies.push(function(){return'('+v+'→¬¬'+v+')';});
+  }
+  if(useNeg&&ops.indexOf('AND')>=0&&ops.indexOf('IMP')>=0){
+    strategies.push(function(){return'(('+v+'∧¬'+v+')→'+v+')';});
+  }
+  if(strategies.length===0){
+    // absolute fallback
+    if(useNeg)return'('+v+'∨¬'+v+')';
+    return'('+v+'→'+v+')';
+  }
+  return strategies[Math.floor(Math.random()*strategies.length)]();
+}
+
+// Build guaranteed contradiction using available ops
+function buildContra(vars,ops){
+  var v=vars[Math.floor(Math.random()*vars.length)];
+  var useNeg=ops.indexOf('NOT')>=0;
+  var strategies=[];
+  if(useNeg&&ops.indexOf('AND')>=0) strategies.push(function(){return'('+v+'∧¬'+v+')';});
+  if(useNeg&&ops.indexOf('EQV')>=0) strategies.push(function(){return'('+v+'↔¬'+v+')';});
+  if(useNeg&&ops.indexOf('AND')>=0) strategies.push(function(){return'¬('+v+'∨¬'+v+')';});
+  if(strategies.length===0){
+    if(useNeg)return'('+v+'∧¬'+v+')';
+    // no negation: wrap a tautology in NOT
+    return'¬('+v+'→'+v+')';
+  }
+  return strategies[Math.floor(Math.random()*strategies.length)]();
+}
+
 function generateFormula(){
   var typeChip=document.querySelector('#type-chips .gen-chip.selected');
   var genType=typeChip?typeChip.dataset.type:'tautologie';
@@ -427,9 +495,50 @@ function generateFormula(){
   Array.from(resDiv.querySelectorAll('button')).forEach(function(b){b.remove();});
   if(binOps.length===0){el.style.fontFamily="'DM Sans',sans-serif";el.style.color='var(--error-border)';el.textContent='⚠ Kies minstens één binair connectief.';return;}
   el.style.fontFamily="'DM Sans',monospace";el.style.color='var(--text-muted)';el.textContent='Genereren...';
-  var depth=Math.max(2,Math.min(n+1,6)),found=null;
-  for(var a=0;a<2000&&!found;a++){var f=buildRand(vars,ops,depth);if(f&&evalType(f,vars)===genType)found=f;}
-  if(!found){var v=vars[0];if(genType==='tautologie')found=fallbackTaut(v,ops);else if(genType==='contradictie')found=fallbackCont(v,ops);else found=vars.length>1?'('+vars[0]+'→'+vars[1]+')':vars[0];}
+
+  var found=null;
+
+  if(genType==='tautologie'){
+    // Try structured first, then validate; fallback to random search
+    for(var a=0;a<20&&!found;a++){
+      var f=buildTaut(vars,ops);
+      if(evalType(f,vars)==='tautologie')found=f;
+    }
+    // If structured failed, try random
+    var depth=Math.min(n+2,6);
+    for(var a=0;a<3000&&!found;a++){
+      var f=buildRand(vars,ops,depth,{});
+      if(evalType(f,vars)==='tautologie')found=f;
+    }
+    if(!found)found=buildTaut(vars,ops); // guaranteed fallback
+  } else if(genType==='contradictie'){
+    for(var a=0;a<20&&!found;a++){
+      var f=buildContra(vars,ops);
+      if(evalType(f,vars)==='contradictie')found=f;
+    }
+    var depth=Math.min(n+2,6);
+    for(var a=0;a<3000&&!found;a++){
+      var f=buildRand(vars,ops,depth,{});
+      if(evalType(f,vars)==='contradictie')found=f;
+    }
+    if(!found)found=buildContra(vars,ops);
+  } else {
+    // Contingentie: random with all vars used
+    var depth=Math.min(n+1,5);
+    for(var a=0;a<3000&&!found;a++){
+      var usedVars={};
+      var f=buildRand(vars,ops,depth,usedVars);
+      // prefer formulas using multiple vars
+      var usedCount=Object.keys(usedVars).length;
+      if(evalType(f,vars)==='contingentie'&&(vars.length<=1||usedCount>=Math.min(vars.length,2)))found=f;
+    }
+    if(!found){
+      // Absolute fallback contingentie
+      if(vars.length>=2)found='('+vars[0]+'→'+vars[1]+')';
+      else found=vars[0];
+    }
+  }
+
   el.style.color='var(--accent)';el.textContent=found;
   var useBtn=document.createElement('button');useBtn.className='gen-use-btn';useBtn.textContent='Gebruik →';
   useBtn.onclick=function(){switchTab('solve');inp.value=found;inp.focus();};
